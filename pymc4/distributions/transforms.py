@@ -13,6 +13,19 @@ class JacobianPreference(enum.Enum):
 
 
 class Transform:
+    """
+    Baseclass to define a bijective transformation of a distribution.
+
+    Parameters
+    ----------
+    transform : tfp.bijectors.bijector
+        The bijector that is called for the transformation.
+    event_ndims : int
+        The number of event dimensions of the distribution that has to be transformed.
+        This is normally automatically set during the initialization of the
+        PyMC4 distribution
+    """
+
     name: Optional[str] = None
     jacobian_preference = JacobianPreference.Forward
 
@@ -33,7 +46,7 @@ class Transform:
 
     @property
     def _transformed_event_ndims(self):
-        """ The length of the event_shape of the transformed distribution. """
+        """ The length of the event_shape of the transformed distribution"""
         if self.event_ndims is None:
             return self._transform.inverse_event_ndims(self._min_event_ndims)
         else:
