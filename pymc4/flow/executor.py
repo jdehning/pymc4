@@ -672,7 +672,11 @@ class SamplingExecutor:
                     scoped_name
                 )
             )
-        state.deterministics_values[scoped_name] = return_value = deterministic.get_value()
+
+        if scoped_name in state.untransformed_values:
+            return_value = state.deterministics_values[scoped_name] = state.untransformed_values[scoped_name]
+        else:
+            state.deterministics_values[scoped_name] = return_value = deterministic.get_value()
         state.deterministics[scoped_name] = deterministic
         return return_value, state
 
