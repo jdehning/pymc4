@@ -22,4 +22,4 @@ from . import mcmc
 from .variational import *
 
 
-__version__ = "4.0a2"
+__version__ = "4.0a3"
