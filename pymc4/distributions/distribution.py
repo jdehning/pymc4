@@ -28,6 +28,7 @@ __all__ = (
 )
 
 
+
 class Distribution(Model):
     """Statistical distribution."""
 
@@ -233,11 +234,12 @@ class Distribution(Model):
 
 
 class Potential:
-    __slots__ = ("_value", "_coef")
+    __slots__ = ("_value", "_coef", "name")
 
-    def __init__(self, value, coef=1.0):
+    def __init__(self, value, coef=1.0, name="Potential"):
         self._value = value
         self._coef = coef
+        self.name = name
 
     @property
     def value(self):

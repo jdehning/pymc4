@@ -30,7 +30,7 @@ class PosteriorPredictiveSamplingExecutor(SamplingExecutor):
     1) The distribution's shape (batch_shape + event_shape) will be checked
     for consitency with the supplied observed value's shape.
     2) If they are inconsistent, an EvaluationError will be raised.
-    3) If they are consistent the distribution's observed values shape
+    3) If they are consistent the distribution's observed values shapeposterior_pre
     will be broadcasted with the distribution's shape to construct a new
     Distribution instance with no observations. This distribution will be
     used for posterior predictive sampling
