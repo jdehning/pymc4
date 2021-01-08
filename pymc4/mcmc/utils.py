@@ -30,7 +30,7 @@ def initialize_sampling_state(
     deterministic_names: List[str]
         The list of names of the model's deterministics_values
     """
-    _, state = flow.evaluate_meta_model(model, observed=observed, state=state)
+    _, state = flow.evaluate_model_transformed(model, observed=observed, state=state)
     deterministic_names = list(state.deterministics_values)
     state, transformed_names = state.as_sampling_state()
     return state, deterministic_names + transformed_names

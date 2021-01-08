@@ -127,13 +127,28 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         self._num_samples = num_samples
         self.seed = seed
 
-        if xla:
-            results, sample_stats = tf.xla.experimental.compile(
-                self._run_chains,
-                inputs=[init_state, burn_in],
+        @tf.function(autograph=False, jit_compile=xla)
+        def run_chains(init, burn_in):
+            kernel = self._kernel(target_log_prob_fn=self.parallel_logpfn,
+                                  **self.kernel_kwargs)
+            if self._adaptation:
+                adapt_kernel = self._adaptation(inner_kernel=kernel,
+                                                **self.adaptation_kwargs)
+            else:
+                adapt_kernel = kernel
+
+            results, sample_stats = mcmc.sample_chain(
+                self._num_samples,
+                current_state=init,
+                kernel=adapt_kernel,
+                num_burnin_steps=burn_in,
+                trace_fn=self.trace_fn,
+                seed=self.seed,
+                **self.chain_kwargs,
             )
-        else:
-            results, sample_stats = self._run_chains(init_state, burn_in)
+            return results, sample_stats
+
+        results, sample_stats = self.run_chains(init_state, burn_in)
 
         posterior = dict(zip(init_keys, results))
 
@@ -169,24 +184,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
             log_likelihood=log_likelihood_dict if include_log_likelihood else None,
         )
 
-    @tf.function(autograph=False)
-    def _run_chains(self, init, burn_in):
-        kernel = self._kernel(target_log_prob_fn=self.parallel_logpfn, **self.kernel_kwargs)
-        if self._adaptation:
-            adapt_kernel = self._adaptation(inner_kernel=kernel, **self.adaptation_kwargs)
-        else:
-            adapt_kernel = kernel
 
-        results, sample_stats = mcmc.sample_chain(
-            self._num_samples,
-            current_state=init,
-            kernel=adapt_kernel,
-            num_burnin_steps=burn_in,
-            trace_fn=self.trace_fn,
-            seed=self.seed,
-            **self.chain_kwargs,
-        )
-        return results, sample_stats
 
     def _assign_arguments(self, kwargs):
         kwargs_keys = set(kwargs.keys())
