@@ -1,9 +1,15 @@
 from typing import Optional, Dict, Any, List
+
+import tqdm
+import logging
+import arviz as az
+
 from pymc4.coroutine_model import Model
 from pymc4 import flow
 from pymc4.mcmc.samplers import reg_samplers, _log
 from pymc4.mcmc.utils import initialize_state, scope_remove_transformed_part_if_required
 import logging
+log = logging.getLogger(__name__)
 
 MYPY = False
 
@@ -53,16 +59,23 @@ def sample(
     model: Model,
     sampler_type: Optional[str] = None,
     num_samples: int = 1000,
+    num_samples_binning: int = 10,
     num_chains: int = 10,
-    burn_in: int = 100,
+    burn_in: int = 200,
+    burn_in_min: int = 10,
+    initial_step_size = 0.001,
+    max_tree_depth = 3,
+    sampling_max_tree_depth = None,
+    target_accept_prob=0.75,
+    ratio_tuning_epochs = 1.5,
     observed: Optional[Dict[str, Any]] = None,
+    init: Optional[Dict[str, Any]] = None,
     state: Optional[flow.SamplingState] = None,
     xla: bool = False,
     use_auto_batching: bool = True,
     sampler_methods: Optional[List] = None,
     trace_discrete: Optional[List[str]] = None,
     seed: Optional[int] = None,
-    include_log_likelihood: bool = False,
     **kwargs,
 ):
     """
@@ -105,8 +118,6 @@ def sample(
         The pyhton list of variables that should be casted to tf.int32 after sampling is completed
     seed : Optional[int]
         A seed for reproducible sampling
-    include_log_likelihood : bool, default=False
-       Include log likelihood in trace
     Returns
     -------
     Trace : InferenceDataType
@@ -142,7 +153,7 @@ def sample(
     sampler_assigned: str = auto_assign_sampler(model, sampler_type)
 
     try:
-        sampler = reg_samplers[sampler_assigned]
+        Sampler = reg_samplers[sampler_assigned]
     except KeyError:
         _log.warning(
             "The given sampler doesn't exist. Please choose samplers from: {}".format(
@@ -151,12 +162,19 @@ def sample(
         )
         raise
 
-    # TODO: keep num_adaptation_steps for nuts/hmc with
-    # adaptive step but later should be removed because of ambiguity
-    if any(x in sampler_assigned for x in ["nuts", "hmc"]):
-        kwargs["num_adaptation_steps"] = burn_in
-
-    sampler = sampler(model, **kwargs)
+    sampler = Sampler(model,
+        num_chains =num_chains,
+        state=state,
+        observed=observed,
+        use_auto_batching=use_auto_batching,
+        init=init,
+        xla=xla,
+        step_size = initial_step_size,
+        max_tree_depth = max_tree_depth,
+                      num_samples_binning = num_samples_binning,
+        target_accept_prob = target_accept_prob,
+                      **kwargs,
+    )
 
     # If some distributions in the model have non default proposal
     # generation functions then we lanuch compound step instead of rwm
@@ -170,19 +188,41 @@ def sample(
         sampler._assign_default_methods(
             sampler_methods=sampler_methods, state=state, observed=observed
         )
+    log.info("Begin tuning")
+    sampler.tune(n_start = burn_in_min, n_tune = burn_in, ratio_epochs = ratio_tuning_epochs)
+    trace_tuning = sampler.retrieve_trace_and_reset()
 
-    return sampler(
-        num_samples=num_samples,
-        num_chains=num_chains,
-        burn_in=burn_in,
-        observed=observed,
-        state=state,
-        use_auto_batching=use_auto_batching,
-        xla=xla,
-        seed=seed,
-        trace_discrete=trace_discrete,
-        include_log_likelihood=include_log_likelihood,
-    )
+    log.info("Begin sampling")
+    if sampling_max_tree_depth is None:
+        sampler.sample(num_samples = num_samples)
+    else:
+        raise RuntimeError("Not implemented")
+        init_state = sampler.last_results
+        step_size = sampler.step_size
+        sampler = Sampler(model,
+                          num_chains=num_chains,
+                          state=state,
+                          observed=observed,
+                          use_auto_batching=use_auto_batching,
+                          init_state=init,
+                          step_size=step_size,
+                          xla=xla,
+                          max_tree_depth=sampling_max_tree_depth,
+                          **kwargs
+                          )
+        # Make also tuning, because of a different tree depth
+        sampler.tune(n_start = int(num_samples*0.4), n_tune = int(num_samples*0.4))
+        trace_tuning2 = sampler.retrieve_trace_and_reset()
+        trace_tuning = az.data.concat([trace_tuning, trace_tuning2], dim="draw", inplace=True)
+        sampler.sample(num_samples = num_samples,
+                       target_accept_prob=target_accept_prob)
+        sampler.sample()
+
+    trace_sampling = sampler.retrieve_trace_and_reset()
+
+    return trace_tuning, trace_sampling
+
+
 
 
 def auto_assign_sampler(

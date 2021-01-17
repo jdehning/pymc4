@@ -30,7 +30,7 @@ def initialize_sampling_state(
     deterministic_names: List[str]
         The list of names of the model's deterministics_values
     """
-    _, state = flow.evaluate_model_transformed(model, observed=observed, state=state)
+    _, state = flow.evaluate_meta_model(model, observed=observed, state=state)
     deterministic_names = list(state.deterministics_values)
     state, transformed_names = state.as_sampling_state()
     return state, deterministic_names + transformed_names
@@ -98,7 +98,6 @@ def trace_to_arviz(
     observed_data=None,
     prior_predictive=None,
     posterior_predictive=None,
-    log_likelihood=None,
     inplace=True,
 ):
     """
@@ -112,7 +111,6 @@ def trace_to_arviz(
     observed_data : dict
     prior_predictive : dict
     posterior_predictive : dict
-    log_likelihood : dict
     inplace : bool
     Returns
     -------
@@ -121,7 +119,7 @@ def trace_to_arviz(
     if trace is not None and isinstance(trace, dict):
         trace = {k: np.swapaxes(v.numpy(), 1, 0) for k, v in trace.items() if "/" in k}
     if sample_stats is not None and isinstance(sample_stats, dict):
-        sample_stats = {k: v.numpy().T for k, v in sample_stats.items()}
+        sample_stats = {k: np.swapaxes(v.numpy(), 1, 0) for k, v in sample_stats.items()}
     if prior_predictive is not None and isinstance(prior_predictive, dict):
         prior_predictive = {k: v[np.newaxis] for k, v in prior_predictive.items()}
     if posterior_predictive is not None and isinstance(posterior_predictive, dict):
@@ -129,17 +127,12 @@ def trace_to_arviz(
             return trace + az.from_dict(posterior_predictive=posterior_predictive)
         else:
             trace = None
-    if log_likelihood is not None and isinstance(log_likelihood, dict):
-        log_likelihood = {
-            k: np.swapaxes(v.numpy(), 1, 0) for k, v in log_likelihood.items() if "/" in k
-        }
 
     return az.from_dict(
         posterior=trace,
         sample_stats=sample_stats,
         prior_predictive=prior_predictive,
         posterior_predictive=posterior_predictive,
-        log_likelihood=log_likelihood,
         observed_data=observed_data,
     )
 
