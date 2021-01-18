@@ -24,6 +24,7 @@ from pymc4 import flow
 from pymc4.mcmc.tf_support import _CompoundStepTF
 import logging
 import numpy as np
+
 log = logging.getLogger(__name__)
 
 
@@ -53,8 +54,8 @@ class _BaseSampler(metaclass=abc.ABCMeta):
     def __init__(
         self,
         model: Model,
-        num_chains = 2,
-        num_samples_binning = 10,
+        num_chains=2,
+        num_samples_binning=10,
         init=None,
         init_state=None,
         step_size=1e-4,
@@ -63,8 +64,8 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         use_auto_batching=True,
         xla=False,
         seed: Optional[int] = None,
-        is_compound =  False,
-        step_size_adaption_per_chain = False,
+        is_compound=False,
+        step_size_adaption_per_chain=False,
         **kwargs,
     ):
         if not isinstance(model, Model):
@@ -87,7 +88,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
 
         self.model = model
         self.xla = xla
-        self.num_chains = np.array(num_chains, dtype='int32')
+        self.num_chains = np.array(num_chains, dtype="int32")
         self.num_samples_binning = num_samples_binning
         self.is_compound = False
         self.stat_names: List[str] = []
@@ -121,8 +122,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
 
         if use_auto_batching:
             self.parallel_logpfn = vectorize_logp_function(logpfn)
-            self.deterministics_callback = vectorize_logp_function(
-                _deterministics_callback)
+            self.deterministics_callback = vectorize_logp_function(_deterministics_callback)
         else:
             self.parallel_logpfn = logpfn
             self.deterministics_callback = _deterministics_callback
@@ -141,35 +141,38 @@ class _BaseSampler(metaclass=abc.ABCMeta):
                 init_keys = [init_keys[i] for i in self.parent_inds]
             init_state = tile_init(init_state, num_chains)
         else:
-            init_state=init_state
+            init_state = init_state
             init_keys = list(init_random.keys())
 
         if hasattr(step_size, "__len__"):
-            step_size=step_size
+            step_size = step_size
         else:
-            step_size = tf.convert_to_tensor(step_size,
-                                                     dtype=init_state[0].dtype)
-            step_size = [step_size*tf.ones(init_part.shape[1:], dtype=init_part.dtype) for init_part in init_state]
+            step_size = tf.convert_to_tensor(step_size, dtype=init_state[0].dtype)
+            step_size = [
+                step_size * tf.ones(init_part.shape[1:], dtype=init_part.dtype)
+                for init_part in init_state
+            ]
             # The dimension size of 1 in the leading dimension has as consequence that
             # the step size is averaged across chains. Change to num_chains to get
             # and individual adaption per chain during sampling:
             step_size = tile_init(step_size, num_chains if step_size_adaption_per_chain else 1)
 
-
         current_state = tf.nest.map_structure(
-            lambda x: tf.convert_to_tensor(x, name='current_state'),
-            init_state)
-        kernel_tmp = self._kernel(target_log_prob_fn=self.parallel_logpfn,
-                                  step_size=step_size,
-                                  **self.kernel_kwargs)
+            lambda x: tf.convert_to_tensor(x, name="current_state"), init_state
+        )
+        kernel_tmp = self._kernel(
+            target_log_prob_fn=self.parallel_logpfn, step_size=step_size, **self.kernel_kwargs
+        )
         if self._adaptation:
-            adapt_kernel_tmp = self._adaptation(inner_kernel=kernel_tmp,
-                                            reduce_fn=tfp.math.reduce_log_harmonic_mean_exp,
-                                            num_adaptation_steps=tf.convert_to_tensor(self.num_samples_binning, dtype = 'int32'),
-                                            shrinkage_target=step_size,
-                                            # Use log_harmonic_mean
-                                            # for robustness as proposed in https://github.com/tensorflow/probability/blob/43a9d6c3f5992a24ddf7aa3fa826a038d70697c5/tensorflow_probability/python/mcmc/dual_averaging_step_size_adaptation.py#L143
-                                            **self.adaptation_kwargs)
+            adapt_kernel_tmp = self._adaptation(
+                inner_kernel=kernel_tmp,
+                reduce_fn=tfp.math.reduce_log_harmonic_mean_exp,
+                num_adaptation_steps=tf.convert_to_tensor(self.num_samples_binning, dtype="int32"),
+                shrinkage_target=step_size,
+                # Use log_harmonic_mean
+                # for robustness as proposed in https://github.com/tensorflow/probability/blob/43a9d6c3f5992a24ddf7aa3fa826a038d70697c5/tensorflow_probability/python/mcmc/dual_averaging_step_size_adaptation.py#L143
+                **self.adaptation_kwargs,
+            )
         init_kernel_results = adapt_kernel_tmp.bootstrap_results(current_state)
 
         # Needs to be initialized here, with stable dimensions of the arguments
@@ -177,21 +180,23 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         @tf.function(autograph=False, jit_compile=self.xla, experimental_relax_shapes=False)
         def _run_chains_compiled(init, init_kernel_results, num_samples, num_adaptation_steps):
 
-
-            kernel = self._kernel(target_log_prob_fn=self.parallel_logpfn,
-                                  step_size=init_kernel_results.new_step_size,
-                                  **self.kernel_kwargs)
+            kernel = self._kernel(
+                target_log_prob_fn=self.parallel_logpfn,
+                step_size=init_kernel_results.new_step_size,
+                **self.kernel_kwargs,
+            )
             if self._adaptation:
-                adapt_kernel = self._adaptation(inner_kernel=kernel,
-                                                reduce_fn=tfp.math.reduce_log_harmonic_mean_exp,
-                                                num_adaptation_steps=num_adaptation_steps,
-                                                shrinkage_target = step_size,
-                                                # Use log_harmonic_mean
-                                                # for robustness as proposed in https://github.com/tensorflow/probability/blob/43a9d6c3f5992a24ddf7aa3fa826a038d70697c5/tensorflow_probability/python/mcmc/dual_averaging_step_size_adaptation.py#L143
-                                                **self.adaptation_kwargs)
+                adapt_kernel = self._adaptation(
+                    inner_kernel=kernel,
+                    reduce_fn=tfp.math.reduce_log_harmonic_mean_exp,
+                    num_adaptation_steps=num_adaptation_steps,
+                    shrinkage_target=step_size,
+                    # Use log_harmonic_mean
+                    # for robustness as proposed in https://github.com/tensorflow/probability/blob/43a9d6c3f5992a24ddf7aa3fa826a038d70697c5/tensorflow_probability/python/mcmc/dual_averaging_step_size_adaptation.py#L143
+                    **self.adaptation_kwargs,
+                )
             else:
                 adapt_kernel = kernel
-
 
             results, sample_stats, final_kernel_results = mcmc.sample_chain(
                 num_samples,
@@ -206,15 +211,14 @@ class _BaseSampler(metaclass=abc.ABCMeta):
             )
             return results, sample_stats, final_kernel_results
 
-        def run_chains(init_state, init_kernel_results, num_samples,
-                       num_adaptation_steps=0):
+        def run_chains(init_state, init_kernel_results, num_samples, num_adaptation_steps=0):
             # Necessary to be an int, because xla compilation requires a static trace length
             num_samples = int(num_samples)
-            num_adaptation_steps = tf.convert_to_tensor(round(num_adaptation_steps), dtype = 'int32')
-            #target_accept_prob = tf.convert_to_tensor(target_accept_prob, dtype = 'float32')
-            return _run_chains_compiled(init_state, init_kernel_results, num_samples,num_adaptation_steps,
-                                        )
-
+            num_adaptation_steps = tf.convert_to_tensor(round(num_adaptation_steps), dtype="int32")
+            # target_accept_prob = tf.convert_to_tensor(target_accept_prob, dtype = 'float32')
+            return _run_chains_compiled(
+                init_state, init_kernel_results, num_samples, num_adaptation_steps,
+            )
 
         self._run_chains = run_chains
 
@@ -222,103 +226,109 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         self._deterministics_callback = _deterministics_callback
         self._deterministic_names = deterministic_names
         self._state = state_
-        
-        # Run one sample, to already trace/compile the function, is not strictly 
+
+        # Run one sample, to already trace/compile the function, is not strictly
         # necessary, but it feels like to be the correct location to do it here already.
         _ = self._run_chains(init_state, init_kernel_results, self.num_samples_binning)
         self.last_results = init_state
         self.last_kernel_results = init_kernel_results
 
         self.accumulated_results = None
-        self.accumulated_sample_stats =None
+        self.accumulated_sample_stats = None
 
-
-
-    def tune(self, n_start = 10, n_tune = 150, ratio_epochs = 1.5):
+    def tune(self, n_start=10, n_tune=150, ratio_epochs=1.5):
         n_window = n_start * ratio_epochs ** np.arange(
-            round(np.log((n_tune * (ratio_epochs - 1) / n_start) + 1) / np.log(
-                ratio_epochs))
+            round(np.log((n_tune * (ratio_epochs - 1) / n_start) + 1) / np.log(ratio_epochs))
         )
         n_window = np.ceil(n_window / self.num_samples_binning) * self.num_samples_binning
         n_window = n_window.astype("int32")
         _log.info(f"tuning windows: {n_window}")
 
-        pbar =  tqdm.tqdm(total=np.sum(n_window))
+        pbar = tqdm.tqdm(total=np.sum(n_window))
         for num_samples in n_window:
             for i in range(0, num_samples, self.num_samples_binning):
-                results, sample_stats, kernel_results = self._run_chains(self.last_results,
-                                                                    self.last_kernel_results,
-                                                                    self.num_samples_binning ,
-                                                                         num_adaptation_steps=np.sum(n_window)
-                                                                   )
+                results, sample_stats, kernel_results = self._run_chains(
+                    self.last_results,
+                    self.last_kernel_results,
+                    self.num_samples_binning,
+                    num_adaptation_steps=np.sum(n_window),
+                )
                 self.last_results = tf.nest.map_structure(lambda x: x[-1], results)
                 self.last_kernel_results = kernel_results
                 self._append_results(results, sample_stats)
 
                 pbar.update(n=self.num_samples_binning)
-                pbar.set_description(f'log-like: {np.average(sample_stats[0][-1]):.1f}')
+                pbar.set_description(f"log-like: {np.average(sample_stats[0][-1]):.1f}")
 
-            new_step_size = _calc_mass_matrix(results, tf.nest.map_structure(tf.math.exp,
-                                                                             self.last_kernel_results.log_averaging_step),
-                                              self.step_size_adaption_per_chain)
+            new_step_size = _calc_mass_matrix(
+                results,
+                tf.nest.map_structure(tf.math.exp, self.last_kernel_results.log_averaging_step),
+                self.step_size_adaption_per_chain,
+            )
             kernel_results = set_step_dual_averaging_kernel(self.last_kernel_results, new_step_size)
             self.last_kernel_results = kernel_results
         pbar.close()
 
     def sample(
-            self,
-            num_samples: int = 1000,
-            burn_in = None,
-            trace_discrete: Optional[List[str]] = None,
+        self, num_samples: int = 1000, burn_in=None, trace_discrete: Optional[List[str]] = None,
     ):
         if burn_in is None:
-            burn_in = num_samples/4
+            burn_in = num_samples / 4
         # tf.print(f"init state:\n{init_keys[-1]}\n{init_state[-1]} ")
         burn_in = int(burn_in)
-        num_adaptation = int(np.ceil(burn_in*0.8))
-        num_samples = int(np.ceil(num_samples / self.num_samples_binning) * self.num_samples_binning)
+        num_adaptation = int(np.ceil(burn_in * 0.8))
+        num_samples = int(
+            np.ceil(num_samples / self.num_samples_binning) * self.num_samples_binning
+        )
 
         pbar = tqdm.tqdm(total=num_samples)
-        self.last_kernel_results._replace(step=tf.convert_to_tensor(0, dtype='int32'))
+        self.last_kernel_results._replace(step=tf.convert_to_tensor(0, dtype="int32"))
         for i in range(0, num_samples, self.num_samples_binning):
-            results, sample_stats, kernel_results = self._run_chains(self.last_results,
-                                                                     self.last_kernel_results,
-                                                                     self.num_samples_binning,
-                                                                     num_adaptation_steps = num_adaptation
-                                                                     )
+            results, sample_stats, kernel_results = self._run_chains(
+                self.last_results,
+                self.last_kernel_results,
+                self.num_samples_binning,
+                num_adaptation_steps=num_adaptation,
+            )
 
             self.last_results = tf.nest.map_structure(lambda x: x[-1], results)
             self.last_kernel_results = kernel_results
 
-            #results_without_burn_in = tf.nest.map_structure(lambda x: x[burn_in:], results)
-            #sample_stats_without_burn_in = tf.nest.map_structure(lambda x: x[burn_in:], sample_stats)
+            # results_without_burn_in = tf.nest.map_structure(lambda x: x[burn_in:], results)
+            # sample_stats_without_burn_in = tf.nest.map_structure(lambda x: x[burn_in:], sample_stats)
 
             self._append_results(results, sample_stats)
 
             init_state = self.last_results
-            #new_step_size = self._calc_mass_matrix(results)
-            #self.step_size = new_step_size
+            # new_step_size = self._calc_mass_matrix(results)
+            # self.step_size = new_step_size
 
             pbar.update(n=self.num_samples_binning)
-            pbar.set_description(f'log-like: {np.average(sample_stats[0][-1]):.1f}')
+            pbar.set_description(f"log-like: {np.average(sample_stats[0][-1]):.1f}")
 
-        results_without_burn_in = tf.nest.map_structure(lambda x: x[burn_in:], self.accumulated_results)
-        sample_stats_without_burn_in = tf.nest.map_structure(lambda x: x[burn_in:], self.accumulated_sample_stats)
+        results_without_burn_in = tf.nest.map_structure(
+            lambda x: x[burn_in:], self.accumulated_results
+        )
+        sample_stats_without_burn_in = tf.nest.map_structure(
+            lambda x: x[burn_in:], self.accumulated_sample_stats
+        )
         self.accumulated_results = results_without_burn_in
         self.accumulated_sample_stats = sample_stats_without_burn_in
         pbar.close()
-
 
     def _append_results(self, results, sample_stats):
         if self.accumulated_results is None:
             self.accumulated_results = results
         else:
-            self.accumulated_results = tf.nest.map_structure(lambda *x: tf.concat(x, axis=0),self.accumulated_results, results)
-        if  self.accumulated_sample_stats is None:
+            self.accumulated_results = tf.nest.map_structure(
+                lambda *x: tf.concat(x, axis=0), self.accumulated_results, results
+            )
+        if self.accumulated_sample_stats is None:
             self.accumulated_sample_stats = sample_stats
         else:
-            self.accumulated_sample_stats = tf.nest.map_structure(lambda *x: tf.concat(x, axis=0), self.accumulated_sample_stats, sample_stats)
-
+            self.accumulated_sample_stats = tf.nest.map_structure(
+                lambda *x: tf.concat(x, axis=0), self.accumulated_sample_stats, sample_stats
+            )
 
     def retrieve_trace_and_reset(self, trace_discrete=False):
         trace = self.make_trace(trace_discrete)
@@ -326,7 +336,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         self.accumulated_sample_stats = None
         return trace
 
-    def make_trace(self,trace_discrete=False):
+    def make_trace(self, trace_discrete=False):
         posterior = dict(zip(self.init_keys, self.accumulated_results))
         if trace_discrete:
             # TODO: maybe better logic can be written here
@@ -355,8 +365,6 @@ class _BaseSampler(metaclass=abc.ABCMeta):
             observed_data=self._state.observed_values,
         )
         return trace
-
-
 
     def _assign_arguments(self, kwargs):
         kwargs_keys = set(kwargs.keys())
@@ -398,7 +406,6 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         for k, v in self.default_adapter_kwargs.items():
             self.adaptation_kwargs.setdefault(k, v)
 
-
     @classmethod
     def _default_kernel_maker(cls):
         # The function is used for compound step support.
@@ -428,55 +435,56 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         """
         pass
 
+
 def set_step_dual_averaging_kernel(kernel, new_step_size):
     step = tf.constant(0, dtype=tf.int32)
     log_shrinkage_target = tf.nest.map_structure(tf.math.log, new_step_size)
     error_sum = tf.nest.map_structure(tf.zeros_like, kernel.error_sum)
     log_averaging_step = tf.nest.map_structure(tf.zeros_like, new_step_size)
-    kernel = kernel._replace(step=step, log_shrinkage_target=log_shrinkage_target, error_sum=error_sum,
-                             log_averaging_step = log_averaging_step, new_step_size=new_step_size)
+    kernel = kernel._replace(
+        step=step,
+        log_shrinkage_target=log_shrinkage_target,
+        error_sum=error_sum,
+        log_averaging_step=log_averaging_step,
+        new_step_size=new_step_size,
+    )
     return kernel
+
 
 def _calc_mass_matrix(results, step_size, step_size_adaption_per_chain):
     def calc_norm_global(step_size):
-        norm_parts = tf.nest.map_structure(tfp.math.reduce_log_harmonic_mean_exp,
-                                           step_size)
+        norm_parts = tf.nest.map_structure(tfp.math.reduce_log_harmonic_mean_exp, step_size)
         return tfp.math.reduce_log_harmonic_mean_exp(tf.stack(norm_parts))
 
     def calc_norm_per_chain(step_size):
         reduce_func = lambda arr: tf.map_fn(tfp.math.reduce_log_harmonic_mean_exp, arr)
-        norm_parts = tf.nest.map_structure(reduce_func,
-                                           step_size)
+        norm_parts = tf.nest.map_structure(reduce_func, step_size)
         return tfp.math.reduce_log_harmonic_mean_exp(tf.stack(norm_parts), axis=0)
-
 
     calc_norm = calc_norm_per_chain if step_size_adaption_per_chain else calc_norm_global
 
     if not step_size_adaption_per_chain:
         step_size_new = tf.nest.map_structure(
-            lambda x: tf.math.reduce_std(x, axis=(0, 1))[tf.newaxis], results)
+            lambda x: tf.math.reduce_std(x, axis=(0, 1))[tf.newaxis], results
+        )
     else:
-        step_size_new = tf.nest.map_structure(
-            lambda x: tf.math.reduce_std(x, axis=(0,)), results)
+        step_size_new = tf.nest.map_structure(lambda x: tf.math.reduce_std(x, axis=(0,)), results)
 
     # scale mass matrix/step sizes to match the norm of the previous step sizes
     norm_old = calc_norm(step_size)
     norm_new = calc_norm(step_size_new)
 
-    scale_norm_global = lambda x:  x / norm_new * norm_old / 4
+    scale_norm_global = lambda x: x / norm_new * norm_old / 4
+
     def scale_norm_per_chain(x):
-        shape = x.shape[0] + tf.TensorShape(np.ones(len(x.shape[1:]), dtype='int32'))
-        return x/tf.reshape(norm_new, shape)*tf.reshape(norm_old,shape)/2
+        shape = x.shape[0] + tf.TensorShape(np.ones(len(x.shape[1:]), dtype="int32"))
+        return x / tf.reshape(norm_new, shape) * tf.reshape(norm_old, shape) / 2
 
     scale_norm = scale_norm_per_chain if step_size_adaption_per_chain else scale_norm_global
 
-    step_size_new = tf.nest.map_structure(
-        scale_norm,
-        step_size_new
-    )
+    step_size_new = tf.nest.map_structure(scale_norm, step_size_new)
 
     return step_size_new
-
 
 
 @register_sampler
@@ -617,13 +625,20 @@ class NUTS(_BaseSampler):
     default_adapter_kwargs: dict = {
         "decay_rate": 0.75,
         "exploration_shrinkage": 0.05,
-        "step_count_smoothing": 10
+        "step_count_smoothing": 10,
     }
     default_kernel_kwargs: dict = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.stat_names = ["lp", "tree_size", "diverging", "energy", "mean_tree_accept", "step_size"]
+        self.stat_names = [
+            "lp",
+            "tree_size",
+            "diverging",
+            "energy",
+            "mean_tree_accept",
+            "step_size",
+        ]
 
     def trace_fn(self, current_state: flow.SamplingState, pkr: Union[tf.Tensor, Any]):
         return (
@@ -632,8 +647,10 @@ class NUTS(_BaseSampler):
             pkr.inner_results.has_divergence,
             pkr.inner_results.energy,
             pkr.inner_results.log_accept_ratio,
-            tf.tile(tf.stack(tf.nest.map_structure(tf.reduce_mean, pkr.new_step_size))[tf.newaxis],
-                    tuple(pkr.inner_results.target_log_prob.shape) + (1,))
+            tf.tile(
+                tf.stack(tf.nest.map_structure(tf.reduce_mean, pkr.new_step_size))[tf.newaxis],
+                tuple(pkr.inner_results.target_log_prob.shape) + (1,),
+            ),
         ) + tuple(self.deterministics_callback(*current_state))
 
 
@@ -936,9 +953,7 @@ class CompoundStep(_BaseSampler):
             kernel, kwargs = kernel_kwargsi
             vars_ = var_keys[curr_indx : curr_indx + set_leni]
             log_output += ("\n" if i > 0 else "") + " -- {}[vars={}, proposal_function={}]".format(
-                kernel._name,
-                [item.split("/")[1] for item in vars_],
-                (func_names[curr_indx]),
+                kernel._name, [item.split("/")[1] for item in vars_], (func_names[curr_indx]),
             )
             curr_indx += set_leni
         _log.info(log_output)

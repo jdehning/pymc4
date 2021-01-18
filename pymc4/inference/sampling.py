@@ -9,6 +9,7 @@ from pymc4 import flow
 from pymc4.mcmc.samplers import reg_samplers, _log
 from pymc4.mcmc.utils import initialize_state, scope_remove_transformed_part_if_required
 import logging
+
 log = logging.getLogger(__name__)
 
 MYPY = False
@@ -18,9 +19,7 @@ if not MYPY:
 
 
 def check_proposal_functions(
-    model: Model,
-    state: Optional[flow.SamplingState] = None,
-    observed: Optional[dict] = None,
+    model: Model, state: Optional[flow.SamplingState] = None, observed: Optional[dict] = None,
 ) -> bool:
     """
     Check for the non-default proposal generation functions
@@ -63,12 +62,12 @@ def sample(
     num_chains: int = 10,
     burn_in: int = 200,
     burn_in_min: int = 10,
-    initial_step_size = 0.001,
-    max_tree_depth = 3,
-    step_size_adaption_per_chain = False,
-    sampling_max_tree_depth = None,
+    initial_step_size=0.001,
+    max_tree_depth=3,
+    step_size_adaption_per_chain=False,
+    sampling_max_tree_depth=None,
     target_accept_prob=0.75,
-    ratio_tuning_epochs = 1.5,
+    ratio_tuning_epochs=1.5,
     observed: Optional[Dict[str, Any]] = None,
     init: Optional[Dict[str, Any]] = None,
     state: Optional[flow.SamplingState] = None,
@@ -163,19 +162,20 @@ def sample(
         )
         raise
 
-    sampler = Sampler(model,
-        num_chains =num_chains,
+    sampler = Sampler(
+        model,
+        num_chains=num_chains,
         state=state,
         observed=observed,
         use_auto_batching=use_auto_batching,
         init=init,
         xla=xla,
-        step_size = initial_step_size,
-        max_tree_depth = max_tree_depth,
-                      num_samples_binning = num_samples_binning,
-        target_accept_prob = target_accept_prob,
-                      step_size_adaption_per_chain = step_size_adaption_per_chain,
-                      **kwargs
+        step_size=initial_step_size,
+        max_tree_depth=max_tree_depth,
+        num_samples_binning=num_samples_binning,
+        target_accept_prob=target_accept_prob,
+        step_size_adaption_per_chain=step_size_adaption_per_chain,
+        **kwargs,
     )
 
     # If some distributions in the model have non default proposal
@@ -191,33 +191,33 @@ def sample(
             sampler_methods=sampler_methods, state=state, observed=observed
         )
     log.info("Begin tuning")
-    sampler.tune(n_start = burn_in_min, n_tune = burn_in, ratio_epochs = ratio_tuning_epochs)
+    sampler.tune(n_start=burn_in_min, n_tune=burn_in, ratio_epochs=ratio_tuning_epochs)
     trace_tuning = sampler.retrieve_trace_and_reset()
 
     log.info("Begin sampling")
     if sampling_max_tree_depth is None:
-        sampler.sample(num_samples = num_samples)
+        sampler.sample(num_samples=num_samples)
     else:
         raise RuntimeError("Not implemented")
         init_state = sampler.last_results
         step_size = sampler.step_size
-        sampler = Sampler(model,
-                          num_chains=num_chains,
-                          state=state,
-                          observed=observed,
-                          use_auto_batching=use_auto_batching,
-                          init_state=init,
-                          step_size=step_size,
-                          xla=xla,
-                          max_tree_depth=sampling_max_tree_depth,
-                          **kwargs
-                          )
+        sampler = Sampler(
+            model,
+            num_chains=num_chains,
+            state=state,
+            observed=observed,
+            use_auto_batching=use_auto_batching,
+            init_state=init,
+            step_size=step_size,
+            xla=xla,
+            max_tree_depth=sampling_max_tree_depth,
+            **kwargs,
+        )
         # Make also tuning, because of a different tree depth
-        sampler.tune(n_start = int(num_samples*0.4), n_tune = int(num_samples*0.4))
+        sampler.tune(n_start=int(num_samples * 0.4), n_tune=int(num_samples * 0.4))
         trace_tuning2 = sampler.retrieve_trace_and_reset()
         trace_tuning = az.data.concat([trace_tuning, trace_tuning2], dim="draw", inplace=True)
-        sampler.sample(num_samples = num_samples,
-                       target_accept_prob=target_accept_prob)
+        sampler.sample(num_samples=num_samples, target_accept_prob=target_accept_prob)
         sampler.sample()
 
     trace_sampling = sampler.retrieve_trace_and_reset()
@@ -225,11 +225,8 @@ def sample(
     return trace_tuning, trace_sampling
 
 
-
-
 def auto_assign_sampler(
-    model: Model,
-    sampler_type: Optional[str] = None,
+    model: Model, sampler_type: Optional[str] = None,
 ):
     """
     The toy implementation of sampler assigner

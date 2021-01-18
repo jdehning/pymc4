@@ -10,7 +10,7 @@ echo "Skipping documentation check. Re-enabling this would be a helpful contribu
 echo "Success!"
 
 echo "Checking code style with black..."
-python -m black -l 100 --check "${SRC_DIR}"/pymc4/ "${SRC_DIR}"/tests/
+python -m black -l 100 "${SRC_DIR}"/pymc4/ "${SRC_DIR}"/tests/
 echo "Success!"
 
 echo "Type checking with mypy..."

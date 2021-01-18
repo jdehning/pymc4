@@ -61,7 +61,9 @@ def make_untransformed_model(dist, transform, state):
             transform.inverse_log_det_jacobian, sampled_transformed_value
         )
         coef = 1.0
-    yield distributions.Potential(potential_fn, coef=coef, name = transformed_scoped_name + "_Potential")
+    yield distributions.Potential(
+        potential_fn, coef=coef, name=transformed_scoped_name + "_Potential"
+    )
     # 3. return value to the user
     return sampled_untransformed_value
 
@@ -94,11 +96,12 @@ def make_transformed_model(dist, transform, state):
         coef = -1.0
     else:
         potential_fn = functools.partial(
-            transform.inverse_log_det_jacobian,
-            state.transformed_values[transformed_scoped_name],
+            transform.inverse_log_det_jacobian, state.transformed_values[transformed_scoped_name],
         )
         coef = 1.0
-    yield distributions.Potential(potential_fn, coef=coef, name=transformed_scoped_name+"_Potential")
+    yield distributions.Potential(
+        potential_fn, coef=coef, name=transformed_scoped_name + "_Potential"
+    )
     # 3. final return+yield will return untransformed_value
     # as it is stored in state.values
     # Note: we need yield here to make another checks on name duplicates, etc

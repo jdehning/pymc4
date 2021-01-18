@@ -104,11 +104,7 @@ def test_advi_with_deterministics(simple_model_with_deterministic):
 
 
 def test_advi_with_deterministics_in_nested_models(deterministics_in_nested_models):
-    (
-        model,
-        *_,
-        deterministic_mapping,
-    ) = deterministics_in_nested_models
+    (model, *_, deterministic_mapping,) = deterministics_in_nested_models
     advi = pm.fit(model(), num_steps=1000)
     samples = advi.approximation.sample(100)
     for deterministic, (inputs, op) in deterministic_mapping.items():
