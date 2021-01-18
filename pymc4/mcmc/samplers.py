@@ -261,7 +261,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
             new_step_size = _calc_mass_matrix(results, tf.nest.map_structure(tf.math.exp, self.last_kernel_results.log_averaging_step))
             kernel_results = set_step_dual_averaging_kernel(self.last_kernel_results, new_step_size)
             self.last_kernel_results = kernel_results
-
+        pbar.close()
 
     def sample(
             self,
@@ -304,6 +304,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         sample_stats_without_burn_in = tf.nest.map_structure(lambda x: x[burn_in:], self.accumulated_sample_stats)
         self.accumulated_results = results_without_burn_in
         self.accumulated_sample_stats = sample_stats_without_burn_in
+        pbar.close()
 
 
     def _append_results(self, results, sample_stats):
