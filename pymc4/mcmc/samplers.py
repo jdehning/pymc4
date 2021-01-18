@@ -64,6 +64,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         xla=False,
         seed: Optional[int] = None,
         is_compound =  False,
+        step_size_adaption_per_chain = False,
         **kwargs,
     ):
         if not isinstance(model, Model):
@@ -99,6 +100,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         self._check_arguments()
         # TODO: problem with tf.function when passing as argument to self._run_chains
         self.seed = seed
+        self.step_size_adaption_per_chain = step_size_adaption_per_chain
 
         if state is not None and observed is not None:
             raise ValueError("Can't use both `state` and `observed` arguments")
@@ -151,7 +153,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
             # The dimension size of 1 in the leading dimension has as consequence that
             # the step size is averaged across chains. Change to num_chains to get
             # and individual adaption per chain during sampling:
-            step_size = tile_init(step_size, 1)
+            step_size = tile_init(step_size, num_chains if step_size_adaption_per_chain else 1)
 
 
         current_state = tf.nest.map_structure(
@@ -190,8 +192,6 @@ class _BaseSampler(metaclass=abc.ABCMeta):
             else:
                 adapt_kernel = kernel
 
-            log.info(f"step size in run 1: {init_kernel_results.inner_results.step_size[:2]}")
-            log.info(f"step size in run 2: {init_kernel_results.new_step_size[:2]}")
 
             results, sample_stats, final_kernel_results = mcmc.sample_chain(
                 num_samples,
@@ -222,8 +222,8 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         self._deterministics_callback = _deterministics_callback
         self._deterministic_names = deterministic_names
         self._state = state_
-
-        # Run one sample, to already trace/compile the function, is not strictly
+        
+        # Run one sample, to already trace/compile the function, is not strictly 
         # necessary, but it feels like to be the correct location to do it here already.
         _ = self._run_chains(init_state, init_kernel_results, self.num_samples_binning)
         self.last_results = init_state
@@ -241,7 +241,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         )
         n_window = np.ceil(n_window / self.num_samples_binning) * self.num_samples_binning
         n_window = n_window.astype("int32")
-        log.info(f"tuning windows: {n_window}")
+        _log.info(f"tuning windows: {n_window}")
 
         pbar =  tqdm.tqdm(total=np.sum(n_window))
         for num_samples in n_window:
@@ -258,7 +258,9 @@ class _BaseSampler(metaclass=abc.ABCMeta):
                 pbar.update(n=self.num_samples_binning)
                 pbar.set_description(f'log-like: {np.average(sample_stats[0][-1]):.1f}')
 
-            new_step_size = _calc_mass_matrix(results, tf.nest.map_structure(tf.math.exp, self.last_kernel_results.log_averaging_step))
+            new_step_size = _calc_mass_matrix(results, tf.nest.map_structure(tf.math.exp,
+                                                                             self.last_kernel_results.log_averaging_step),
+                                              self.step_size_adaption_per_chain)
             kernel_results = set_step_dual_averaging_kernel(self.last_kernel_results, new_step_size)
             self.last_kernel_results = kernel_results
         pbar.close()
@@ -435,24 +437,44 @@ def set_step_dual_averaging_kernel(kernel, new_step_size):
                              log_averaging_step = log_averaging_step, new_step_size=new_step_size)
     return kernel
 
-def _calc_mass_matrix(results, step_size):
-    def calc_norm(step_size):
+def _calc_mass_matrix(results, step_size, step_size_adaption_per_chain):
+    def calc_norm_global(step_size):
         norm_parts = tf.nest.map_structure(tfp.math.reduce_log_harmonic_mean_exp,
                                            step_size)
         return tfp.math.reduce_log_harmonic_mean_exp(tf.stack(norm_parts))
 
-    step_size_new = tf.nest.map_structure(
-        lambda x: tf.math.reduce_std(x, axis=(0, 1))[tf.newaxis], results)
+    def calc_norm_per_chain(step_size):
+        reduce_func = lambda arr: tf.map_fn(tfp.math.reduce_log_harmonic_mean_exp, arr)
+        norm_parts = tf.nest.map_structure(reduce_func,
+                                           step_size)
+        return tfp.math.reduce_log_harmonic_mean_exp(tf.stack(norm_parts), axis=0)
+
+
+    calc_norm = calc_norm_per_chain if step_size_adaption_per_chain else calc_norm_global
+
+    if not step_size_adaption_per_chain:
+        step_size_new = tf.nest.map_structure(
+            lambda x: tf.math.reduce_std(x, axis=(0, 1))[tf.newaxis], results)
+    else:
+        step_size_new = tf.nest.map_structure(
+            lambda x: tf.math.reduce_std(x, axis=(0,)), results)
 
     # scale mass matrix/step sizes to match the norm of the previous step sizes
     norm_old = calc_norm(step_size)
     norm_new = calc_norm(step_size_new)
 
+    scale_norm_global = lambda x:  x / norm_new * norm_old / 4
+    def scale_norm_per_chain(x):
+        shape = x.shape[0] + tf.TensorShape(np.ones(len(x.shape[1:]), dtype='int32'))
+        return x/tf.reshape(norm_new, shape)*tf.reshape(norm_old,shape)/2
+
+    scale_norm = scale_norm_per_chain if step_size_adaption_per_chain else scale_norm_global
+
     step_size_new = tf.nest.map_structure(
-        lambda x: x / norm_new * norm_old / 4,
+        scale_norm,
         step_size_new
     )
-    norm_new_adapted = calc_norm(step_size_new)
+
     return step_size_new
 
 
@@ -604,8 +626,6 @@ class NUTS(_BaseSampler):
         self.stat_names = ["lp", "tree_size", "diverging", "energy", "mean_tree_accept", "step_size"]
 
     def trace_fn(self, current_state: flow.SamplingState, pkr: Union[tf.Tensor, Any]):
-        if tf.executing_eagerly():
-            tf.print(f"log-likelihood: {pkr.inner_results.target_log_prob}")
         return (
             pkr.inner_results.target_log_prob,
             pkr.inner_results.leapfrogs_taken,

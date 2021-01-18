@@ -65,6 +65,7 @@ def sample(
     burn_in_min: int = 10,
     initial_step_size = 0.001,
     max_tree_depth = 3,
+    step_size_adaption_per_chain = False,
     sampling_max_tree_depth = None,
     target_accept_prob=0.75,
     ratio_tuning_epochs = 1.5,
@@ -173,7 +174,8 @@ def sample(
         max_tree_depth = max_tree_depth,
                       num_samples_binning = num_samples_binning,
         target_accept_prob = target_accept_prob,
-                      **kwargs,
+                      step_size_adaption_per_chain = step_size_adaption_per_chain,
+                      **kwargs
     )
 
     # If some distributions in the model have non default proposal
