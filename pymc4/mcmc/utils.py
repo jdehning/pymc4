@@ -120,12 +120,15 @@ def trace_to_arviz(
         trace = {
             k.replace("/", "|"): np.swapaxes(v.numpy(), 1, 0) for k, v in trace.items() if "/" in k
         }
+
     if sample_stats is not None and isinstance(sample_stats, dict):
         sample_stats = {
             k.replace("/", "|"): np.swapaxes(v.numpy(), 1, 0) for k, v in sample_stats.items()
         }
+
     if prior_predictive is not None and isinstance(prior_predictive, dict):
         prior_predictive = {k.replace("/", "|"): v[np.newaxis] for k, v in prior_predictive.items()}
+
     if posterior_predictive is not None and isinstance(posterior_predictive, dict):
         for key in posterior_predictive:
             posterior_predictive[key.replace("/", "|")] = posterior_predictive.pop(key)
@@ -133,6 +136,10 @@ def trace_to_arviz(
             return trace + az.from_dict(posterior_predictive=posterior_predictive)
         else:
             trace = None
+
+    if observed_data is not None and isinstance(observed_data, dict):
+        for key in observed_data:
+            observed_data[key.replace("/", "|")] = observed_data.pop(key)
 
     return az.from_dict(
         posterior=trace,
