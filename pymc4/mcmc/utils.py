@@ -112,8 +112,14 @@ def trace_to_arviz(
     -------
     ArviZ's InferenceData object
     """
+
+    # Replace all / with | because arviz and xarray are confusion / with folder structure in
+    # special cases!
+
     if trace is not None and isinstance(trace, dict):
-        trace = {k: np.swapaxes(v.numpy(), 1, 0) for k, v in trace.items() if "/" in k}
+        trace = {
+            k.replace("/", "|"): np.swapaxes(v.numpy(), 1, 0) for k, v in trace.items() if "/" in k
+        }
     if sample_stats is not None and isinstance(sample_stats, dict):
         sample_stats = {k: np.swapaxes(v.numpy(), 1, 0) for k, v in sample_stats.items()}
     if prior_predictive is not None and isinstance(prior_predictive, dict):
