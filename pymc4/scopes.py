@@ -171,7 +171,7 @@ class Scope(object):
         >>> assert Scope.variable_name(None) is None
         >>> assert Scope.variable_name("") is None
         """
-        value = "/".join(map(str, cls.chain("name", leaf=name, drop_none=True)))
+        value = "|".join(map(str, cls.chain("name", leaf=name, drop_none=True)))
         if not value:
             return None
         else:
