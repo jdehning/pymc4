@@ -130,7 +130,8 @@ def trace_to_arviz(
         prior_predictive = {k.replace("/", "|"): v[np.newaxis] for k, v in prior_predictive.items()}
 
     if posterior_predictive is not None and isinstance(posterior_predictive, dict):
-        for key in posterior_predictive:
+        keys = list(posterior_predictive.keys())  # Cant pop in loop i.e. changing keys
+        for key in keys:
             posterior_predictive[key.replace("/", "|")] = posterior_predictive.pop(key)
         if isinstance(trace, az.InferenceData) and inplace == True:
             return trace + az.from_dict(posterior_predictive=posterior_predictive)
@@ -138,7 +139,8 @@ def trace_to_arviz(
             trace = None
 
     if observed_data is not None and isinstance(observed_data, dict):
-        for key in observed_data:
+        keys = list(observed_data.keys())  # Cant pop in loop i.e. changing keys
+        for key in keys:
             observed_data[key.replace("/", "|")] = observed_data.pop(key)
 
     return az.from_dict(
