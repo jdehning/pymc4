@@ -150,7 +150,7 @@ class NameParts:
             ``NameParts`` instance which is returned.
 
         """
-        split = name.split("/")
+        split = name.split("|")
         path, original_name = split[:-1], split[-1]
         match = cls.NAME_RE.match(original_name)
         if not cls.is_valid_name(name):
@@ -182,7 +182,7 @@ class NameParts:
             The full name. This will include the path, transform and the
             untransformed parts of the name.
         """
-        return "/".join(self.path + (self.original_name,))
+        return "|".join(self.path + (self.original_name,))
 
     @property
     def full_untransformed_name(self) -> str:
@@ -193,7 +193,7 @@ class NameParts:
         str
             The path and the untransformed_name joined by a slash.
         """
-        return "/".join(self.path + (self.untransformed_name,))
+        return "|".join(self.path + (self.untransformed_name,))
 
     @property
     def is_transformed(self) -> bool:

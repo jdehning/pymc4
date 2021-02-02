@@ -113,16 +113,31 @@ def trace_to_arviz(
     ArviZ's InferenceData object
     """
     if trace is not None and isinstance(trace, dict):
-        trace = {k: np.swapaxes(v.numpy(), 1, 0) for k, v in trace.items() if ("/" in k) or ("|" in k)}
+        trace = {
+            k.replace("/", "|"): np.swapaxes(v.numpy(), 1, 0) for k, v in trace.items() if ("/" in k) or ("|" in k)
+        }
+
     if sample_stats is not None and isinstance(sample_stats, dict):
-        sample_stats = {k: np.swapaxes(v.numpy(), 1, 0) for k, v in sample_stats.items()}
+        sample_stats = {
+            k.replace("/", "|"): np.swapaxes(v.numpy(), 1, 0) for k, v in sample_stats.items()
+        }
+
     if prior_predictive is not None and isinstance(prior_predictive, dict):
-        prior_predictive = {k: v[np.newaxis] for k, v in prior_predictive.items()}
+        prior_predictive = {k.replace("/", "|"): v[np.newaxis] for k, v in prior_predictive.items()}
+
     if posterior_predictive is not None and isinstance(posterior_predictive, dict):
+        keys = list(posterior_predictive.keys())  # Cant pop in loop i.e. changing keys
+        for key in keys:
+            posterior_predictive[key.replace("/", "|")] = posterior_predictive.pop(key)
         if isinstance(trace, az.InferenceData) and inplace == True:
             return trace + az.from_dict(posterior_predictive=posterior_predictive)
         else:
             trace = None
+
+    if observed_data is not None and isinstance(observed_data, dict):
+        keys = list(observed_data.keys())  # Cant pop in loop i.e. changing keys
+        for key in keys:
+            observed_data[key.replace("/", "|")] = observed_data.pop(key)
 
     return az.from_dict(
         posterior=trace,
