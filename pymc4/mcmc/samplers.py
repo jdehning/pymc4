@@ -63,6 +63,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         observed=None,
         use_auto_batching=True,
         xla=False,
+        bijector=None,
         seed: Optional[int] = None,
         is_compound=False,
         step_size_adaption_per_chain=False,
@@ -102,6 +103,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         # TODO: problem with tf.function when passing as argument to self._run_chains
         self.seed = seed
         self.step_size_adaption_per_chain = step_size_adaption_per_chain
+        self._bijector = bijector
 
         if state is not None and observed is not None:
             raise ValueError("Can't use both `state` and `observed` arguments")
@@ -163,6 +165,11 @@ class _BaseSampler(metaclass=abc.ABCMeta):
         kernel_tmp = self._kernel(
             target_log_prob_fn=self.parallel_logpfn, step_size=step_size, **self.kernel_kwargs
         )
+        if self._bijector:
+            kernel_tmp = mcmc.TransformedTransitionKernel(
+                inner_kernel=kernel_tmp,
+                bijector=self._bijector
+            )
         if self._adaptation:
             adapt_kernel_tmp = self._adaptation(
                 inner_kernel=kernel_tmp,
@@ -177,7 +184,7 @@ class _BaseSampler(metaclass=abc.ABCMeta):
 
         # Needs to be initialized here, with stable dimensions of the arguments
         # to avoid a retracing/recompilation of the function
-        @tf.function(autograph=False, jit_compile=self.xla, experimental_relax_shapes=False)
+        @tf.function(autograph=False, experimental_compile=self.xla, experimental_relax_shapes=False)
         def _run_chains_compiled(init, init_kernel_results, num_samples, num_adaptation_steps):
 
             kernel = self._kernel(
@@ -185,6 +192,11 @@ class _BaseSampler(metaclass=abc.ABCMeta):
                 step_size=init_kernel_results.new_step_size,
                 **self.kernel_kwargs,
             )
+            if self._bijector:
+                kernel = mcmc.TransformedTransitionKernel(
+                    inner_kernel=kernel,
+                    bijector=self._bijector
+                )
             if self._adaptation:
                 adapt_kernel = self._adaptation(
                     inner_kernel=kernel,

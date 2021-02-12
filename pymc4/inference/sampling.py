@@ -68,6 +68,7 @@ def sample(
     sampling_max_tree_depth=None,
     target_accept_prob=0.75,
     ratio_tuning_epochs=1.5,
+    bijector=None,
     observed: Optional[Dict[str, Any]] = None,
     init: Optional[Dict[str, Any]] = None,
     state: Optional[flow.SamplingState] = None,
@@ -175,6 +176,7 @@ def sample(
         num_samples_binning=num_samples_binning,
         target_accept_prob=target_accept_prob,
         step_size_adaption_per_chain=step_size_adaption_per_chain,
+        bijector=bijector,
         **kwargs,
     )
 
