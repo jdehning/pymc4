@@ -2,6 +2,6 @@ arviz>=0.5.1
 xarray>=0.16.2
 gast>=0.3.2
 # tested with  tf-nightly==2.5.0.dev20210107
-tensorflow-probability==0.12.1
+tensorflow-probability==0.12.1 
 pymc3
 scipy>=0.18.1
