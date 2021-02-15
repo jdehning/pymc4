@@ -170,25 +170,6 @@ class _BaseSampler(metaclass=abc.ABCMeta):
                 inner_kernel=kernel_tmp,
                 bijector=self._bijector
             )
-
-            # trace_fn has to be redefined, as the statistics are now one kernel deeper.
-            def trace_fn(self, current_state: flow.SamplingState,
-                         pkr: Union[tf.Tensor, Any]):
-                return (
-                           pkr.inner_results.inner_results.target_log_prob,
-                           pkr.inner_results.inner_results.leapfrogs_taken,
-                           pkr.inner_results.inner_results.has_divergence,
-                           pkr.inner_results.inner_results.energy,
-                           pkr.inner_results.log_accept_ratio,
-                           tf.tile(
-                               tf.stack(tf.nest.map_structure(tf.reduce_mean,
-                                                              pkr.new_step_size))[
-                                   tf.newaxis],
-                               tuple(pkr.inner_results.inner_results.target_log_prob.shape) + (1,),
-                           ),
-                       ) + tuple(self.deterministics_callback(*current_state))
-            self.trace_fn = trace_fn()
-
         if self._adaptation:
             adapt_kernel_tmp = self._adaptation(
                 inner_kernel=kernel_tmp,
@@ -672,17 +653,32 @@ class NUTS(_BaseSampler):
         ]
 
     def trace_fn(self, current_state: flow.SamplingState, pkr: Union[tf.Tensor, Any]):
-        return (
-            pkr.inner_results.target_log_prob,
-            pkr.inner_results.leapfrogs_taken,
-            pkr.inner_results.has_divergence,
-            pkr.inner_results.energy,
-            pkr.inner_results.log_accept_ratio,
-            tf.tile(
-                tf.stack(tf.nest.map_structure(tf.reduce_mean, pkr.new_step_size))[tf.newaxis],
-                tuple(pkr.inner_results.target_log_prob.shape) + (1,),
-            ),
-        ) + tuple(self.deterministics_callback(*current_state))
+        if hasattr(pkr.inner_results, 'inner_results'):
+            return (
+                       pkr.inner_results.inner_results.target_log_prob,
+                       pkr.inner_results.inner_results.leapfrogs_taken,
+                       pkr.inner_results.inner_results.has_divergence,
+                       pkr.inner_results.inner_results.energy,
+                       pkr.inner_results.inner_results.log_accept_ratio,
+                       tf.tile(
+                           tf.stack(tf.nest.map_structure(tf.reduce_mean,
+                                                          pkr.new_step_size))[
+                               tf.newaxis],
+                           tuple(pkr.inner_results.inner_results.target_log_prob.shape) + (1,),
+                       ),
+                   ) + tuple(self.deterministics_callback(*current_state))
+        else:
+            return (
+                pkr.inner_results.target_log_prob,
+                pkr.inner_results.leapfrogs_taken,
+                pkr.inner_results.has_divergence,
+                pkr.inner_results.energy,
+                pkr.inner_results.log_accept_ratio,
+                tf.tile(
+                    tf.stack(tf.nest.map_structure(tf.reduce_mean, pkr.new_step_size))[tf.newaxis],
+                    tuple(pkr.inner_results.target_log_prob.shape) + (1,),
+                ),
+            ) + tuple(self.deterministics_callback(*current_state))
 
 
 @register_sampler
